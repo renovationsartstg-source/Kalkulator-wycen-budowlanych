@@ -42,14 +42,14 @@ CENNIK = {
     }
 }
 
-# --- FUNKCJA CZYSZCZENIA POLSKICH ZNAKÓW ---
+# --- FUNKCJA CZYSZCZENIA POLSKICH ZNAKÓW DLA PDF ---
 def clean_pl(text):
     replacements = {
         'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
         'Ą': 'A', 'Ć': 'C', 'Ę': 'E', 'Ł': 'L', 'Ń': 'N', 'Ó': 'O', 'Ś': 'S', 'Ź': 'Z', 'Ż': 'Z'
     }
     for k, v in replacements.items():
-        text = text.replace(k, v)
+        text = str(text).replace(k, v)
     return text
 
 # --- FUNKCJA GENEROWANIA PDF ---
@@ -57,6 +57,7 @@ def generate_pdf(klient, uslugi, netto, vat, brutto, vat_rate):
     pdf = FPDF()
     pdf.add_page()
     
+    # Nagłówek
     pdf.set_font("helvetica", "B", 16)
     pdf.cell(0, 10, clean_pl(f"OFERTA REMONTOWA: {FIRMA}"), ln=True, align="C")
     
@@ -66,6 +67,7 @@ def generate_pdf(klient, uslugi, netto, vat, brutto, vat_rate):
     pdf.cell(0, 10, clean_pl(f"Dla: {klient}"), ln=True)
     pdf.ln(10)
 
+    # Tabela Nagłówki
     pdf.set_fill_color(230, 230, 230)
     pdf.set_font("helvetica", "B", 10)
     pdf.cell(90, 10, "Usluga", border=1, fill=True)
@@ -74,6 +76,7 @@ def generate_pdf(klient, uslugi, netto, vat, brutto, vat_rate):
     pdf.cell(45, 10, "Wartosc", border=1, fill=True, align="C")
     pdf.ln()
 
+    # Tabela Dane
     pdf.set_font("helvetica", "", 10)
     for u in uslugi:
         pdf.cell(90, 10, clean_pl(u["Usługa"]), border=1)
@@ -83,6 +86,8 @@ def generate_pdf(klient, uslugi, netto, vat, brutto, vat_rate):
         pdf.ln()
 
     pdf.ln(10)
+    
+    # Podsumowanie
     pdf.set_font("helvetica", "B", 12)
     pdf.cell(145, 10, "Suma Netto:", align="R")
     pdf.cell(45, 10, f"{netto:,.2f} zl", align="R")
@@ -96,8 +101,9 @@ def generate_pdf(klient, uslugi, netto, vat, brutto, vat_rate):
     
     return pdf.output()
 
-# --- INTERFEJS ---
+# --- INTERFEJS UŻYTKOWNIKA ---
 st.title(f"🏗️ {FIRMA} - System Ofertowy")
+st.markdown("Wprowadź dane, aby wygenerować profesjonalną ofertę.")
 
 klient = st.text_input("Nazwa Klienta", placeholder="np. Jan Kowalski")
 data_dzis = datetime.date.today().strftime("%d-%m-%Y")
@@ -115,8 +121,8 @@ for i, kategoria in enumerate(CENNIK.keys()):
             with col1:
                 st.write(f"{usluga} (**{cena} zł**)")
             with col2:
-                # POPRAWKA: unikalny klucz dla każdego inputa
-                ilosc = st.number_input("Ilość", min_value=0.0, step=1.0, key=f"input_{kategoria}_{usluga}")
+                # Klucz unikalny dla każdego pola (input_kategoria_usluga)
+                ilosc = st.number_input("Ilość", min_value=0.0, step=1.0, key=f"in_{kategoria}_{usluga}")
             
             if ilosc > 0:
                 wartosc = ilosc * cena
@@ -139,20 +145,26 @@ st.sidebar.write(f"**Netto:** {suma_netto:,.2f} zł")
 st.sidebar.write(f"**VAT ({vat_rate}%):** {suma_vat:,.2f} zł")
 st.sidebar.subheader(f"**BRUTTO: {suma_brutto:,.2f} zł**")
 
-if st.button("Generuj Ofertę PDF"):
+# --- GENEROWANIE OFERTY ---
+if st.button("Przygotuj ofertę do pobrania"):
     if not klient:
         st.error("Proszę podać nazwę klienta!")
     elif suma_netto == 0:
         st.warning("Nie wybrano żadnych usług!")
     else:
         try:
+            # Generowanie danych PDF
             pdf_data = generate_pdf(klient, wybrane_uslugi, suma_netto, suma_vat, suma_brutto, vat_rate)
-            st.success("PDF gotowy!")
+            
+            # Konwersja do bytes() naprawia błąd Invalid binary data format
+            pdf_bytes = bytes(pdf_data)
+            
+            st.success("Oferta PDF gotowa!")
             st.download_button(
                 label="📥 Pobierz Ofertę PDF",
-                data=pdf_data,
-                file_name=f"Oferta_{klient}.pdf",
+                data=pdf_bytes,
+                file_name=f"Oferta_{klient}_{data_dzis}.pdf",
                 mime="application/pdf"
             )
         except Exception as e:
-            st.error(f"Błąd: {e}")
+            st.error(f"Błąd podczas generowania: {e}")
