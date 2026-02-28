@@ -1,6 +1,7 @@
 import streamlit as st
 import datetime
-import pandas as pd
+from fpdf import FPDF
+import io
 
 # --- KONFIGURACJA STRONY ---
 st.set_page_config(page_title="RenovationsArt - Kalkulator", page_icon="🏗️")
@@ -42,29 +43,83 @@ CENNIK = {
     }
 }
 
-st.title(f"🏗️ {FIRMA} - System Ofertowy")
-st.markdown("Wprowadź dane, aby wygenerować profesjonalną ofertę dla klienta.")
+# --- FUNKCJA GENEROWANIA PDF ---
+def generate_pdf(klient, uslugi, netto, vat, brutto, vat_rate):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
+    # Nagłówek (Bez polskich znaków w nazwie czcionki dla uniknięcia błędów)
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, f"OFERTA REMONTOWA: {FIRMA}", ln=True, align="C")
+    
+    pdf.set_font("Arial", "", 12)
+    pdf.ln(5)
+    pdf.cell(0, 10, f"Data: {datetime.date.today().strftime('%d-%m-%Y')}", ln=True, align="R")
+    pdf.cell(0, 10, f"Dla: {klient}", ln=True)
+    pdf.ln(10)
 
-# --- FORMULARZ ---
+    # Tabela Nagłówki
+    pdf.set_fill_color(230, 230, 230)
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(90, 10, "Usluga", border=1, fill=True)
+    pdf.cell(25, 10, "Ilosc", border=1, fill=True, align="C")
+    pdf.cell(35, 10, "Cena jedn.", border=1, fill=True, align="C")
+    pdf.cell(40, 10, "Wartosc", border=1, fill=True, align="C")
+    pdf.ln()
+
+    # Tabela Dane
+    pdf.set_font("Arial", "", 10)
+    for u in uslugi:
+        # Usuwamy polskie znaki w PDF dla stabilności (lub zastępujemy)
+        nazwa = u["Usługa"].replace("ść", "sc").replace("ą", "a").replace("ę", "e").replace("ł", "l").replace("ó", "o").replace("ń", "n").replace("ż", "z").replace("ź", "z")
+        pdf.cell(90, 10, nazwa, border=1)
+        pdf.cell(25, 10, str(u["Ilość"]), border=1, align="C")
+        pdf.cell(35, 10, u["Cena jedn."], border=1, align="C")
+        pdf.cell(40, 10, f"{u['Wartość']:.2f} zl", border=1, align="C")
+        pdf.ln()
+
+    pdf.ln(10)
+    
+    # Podsumowanie
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(150, 10, "Suma Netto:", align="R")
+    pdf.cell(40, 10, f"{netto:,.2f} zl", align="R")
+    pdf.ln()
+    pdf.cell(150, 10, f"VAT ({vat_rate}%):", align="R")
+    pdf.cell(40, 10, f"{vat:,.2f} zl", align="R")
+    pdf.ln()
+    pdf.set_fill_color(255, 255, 0)
+    pdf.cell(150, 10, "KWOTA BRUTTO:", align="R")
+    pdf.cell(40, 10, f"{brutto:,.2f} zl", border=1, fill=True, align="R")
+    
+    pdf.ln(20)
+    pdf.set_font("Arial", "I", 8)
+    pdf.multi_cell(0, 5, "Waznosc oferty: 30 dni.\nDokument wygenerowany automatycznie przez system RenovationsArt.")
+    
+    return pdf.output(dest='S').encode('latin-1')
+
+# --- INTERFEJS UŻYTKOWNIKA ---
+st.title(f"🏗️ {FIRMA} - System Ofertowy")
+st.markdown("Wprowadź dane, aby wygenerować profesjonalną ofertę PDF.")
+
 klient = st.text_input("Nazwa Klienta", placeholder="np. Jan Kowalski")
 data_dzis = datetime.date.today().strftime("%d-%m-%Y")
 
 wybrane_uslugi = []
 suma_netto = 0
 
-# Interfejs zakładek
 tabs = st.tabs(list(CENNIK.keys()))
 
 for i, kategoria in enumerate(CENNIK.keys()):
     with tabs[i]:
         st.subheader(f"Kategoria: {kategoria}")
         for usluga, cena in CENNIK[kategoria].items():
-            # Używamy kolumn, aby interfejs był czysty
             col1, col2 = st.columns([3, 1])
             with col1:
                 st.write(f"{usluga} (**{cena} zł**)")
             with col2:
-                ilosc = st.number_input("Ilość", min_value=0.0, step=1.0, key=usluga)
+                ilosc = st.number_input("Ilość", min_value=0.0, step=1.0, key=f"{kategoria}_{usluga}")
             
             if ilosc > 0:
                 wartosc = ilosc * cena
@@ -76,7 +131,6 @@ for i, kategoria in enumerate(CENNIK.keys()):
                 })
                 suma_netto += wartosc
 
-# --- PODSUMOWANIE I VAT ---
 st.divider()
 col_v1, col_v2 = st.columns(2)
 with col_v1:
@@ -91,30 +145,21 @@ st.sidebar.write(f"**VAT ({vat_rate}%):** {suma_vat:,.2f} zł")
 st.sidebar.subheader(f"**BRUTTO: {suma_brutto:,.2f} zł**")
 
 # --- GENEROWANIE RAPORTU ---
-if st.button("Przygotuj ofertę do pobrania"):
+if st.button("Przygotuj Ofertę PDF"):
     if not klient:
         st.error("Proszę podać nazwę klienta!")
     elif suma_netto == 0:
         st.warning("Nie wybrano żadnych usług!")
     else:
-        raport = f"OFERTA FIRMY: {FIRMA}\nDLA KLIENTA: {klient}\nDATA: {data_dzis}\n"
-        raport += "="*40 + "\n\n"
-        
-        for item in wybrane_uslugi:
-            raport += f"- {item['Usługa']}\n  {item['Ilość']} x {item['Cena jedn.']} = {item['Wartość']:.2f} zł\n"
-        
-        raport += "\n" + "="*40 + "\n"
-        raport += f"SUMA NETTO: {suma_netto:,.2f} zł\n"
-        raport += f"VAT {vat_rate}%: {suma_vat:,.2f} zł\n"
-        raport += f"KWOTA BRUTTO: {suma_brutto:,.2f} zł\n"
-        raport += "="*40 + "\n"
-        raport += "\n* Ważność oferty: 30 dni.\n* Dokument wygenerowany automatycznie."
-
-        st.text_area("Podgląd oferty", raport, height=300)
-        
-        st.download_button(
-            label="Pobierz plik tekstowy (.txt)",
-            data=raport,
-            file_name=f"Oferta_{klient}_{data_dzis}.txt",
-            mime="text/plain"
-        )
+        try:
+            pdf_output = generate_pdf(klient, wybrane_uslugi, suma_netto, suma_vat, suma_brutto, vat_rate)
+            
+            st.success("Oferta PDF gotowa do pobrania!")
+            st.download_button(
+                label="📥 Pobierz Ofertę (PDF)",
+                data=pdf_output,
+                file_name=f"Oferta_{klient}_{data_dzis}.pdf",
+                mime="application/pdf"
+            )
+        except Exception as e:
+            st.error(f"Wystąpił błąd podczas generowania PDF: {e}")
