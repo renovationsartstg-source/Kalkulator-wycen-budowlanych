@@ -101,13 +101,12 @@ def generate_pdf(klient, uslugi, netto, vat, brutto, vat_rate):
     
     pdf.ln(20)
     pdf.set_font("helvetica", "I", 8)
-    pdf.multi_cell(0, 5, "Waznosc oferty: 30 dni.\nDokument wygenerowany automatycznie przez system RenovationsArt.")
+    pdf.multi_cell(0, 5, "Waznosc oferty: 30 dni.\nDokument wygenerowany automatycznie.")
     
     return pdf.output().encode('latin-1', 'ignore')
 
 # --- INTERFEJS UŻYTKOWNIKA ---
 st.title(f"🏗️ {FIRMA} - System Ofertowy")
-st.markdown("Wybierz usługi i wygeneruj profesjonalną ofertę PDF.")
 
 klient = st.text_input("Nazwa Klienta", placeholder="np. Jan Kowalski")
 data_dzis = datetime.date.today().strftime("%d-%m-%Y")
@@ -125,7 +124,6 @@ for i, kategoria in enumerate(CENNIK.keys()):
             with col1:
                 st.write(f"{usluga} (**{cena} zł**)")
             with col2:
-                # Klucz musi być unikalny, łączymy kategorię z usługą
                 ilosc = st.number_input("Ilość", min_value=0.0, step=1.0, key=f"{kategoria}_{usluga}")
             
             if ilosc > 0:
@@ -139,24 +137,29 @@ for i, kategoria in enumerate(CENNIK.keys()):
                 suma_netto += wartosc
 
 st.divider()
-col_v1, col_v2 = st.columns(2)
-with col_v1:
-    vat_rate = st.radio("Stawka VAT", [8, 23], index=0, horizontal=True)
+vat_rate = st.radio("Stawka VAT", [8, 23], index=0, horizontal=True)
 
 suma_vat = suma_netto * (vat_rate / 100)
 suma_brutto = suma_netto + suma_vat
 
-st.sidebar.header("Podsumowanie Finansowe")
-st.sidebar.write(f"**Netto:** {suma_netto:,.2f} zł")
-st.sidebar.write(f"**VAT ({vat_rate}%):** {suma_vat:,.2f} zł")
-st.sidebar.subheader(f"**BRUTTO: {suma_brutto:,.2f} zł**")
+st.sidebar.header("Podsumowanie")
+st.sidebar.write(f"Netto: {suma_netto:,.2f} zł")
+st.sidebar.write(f"VAT ({vat_rate}%): {suma_vat:,.2f} zł")
+st.sidebar.subheader(f"BRUTTO: {suma_brutto:,.2f} zł")
 
-# --- PRZYCISKI GENEROWANIA ---
-col_btn1, col_btn2 = st.columns(2)
-
-with col_btn1:
-    if st.button("Pokaż podgląd tekstowy"):
-        if not klient:
-            st.error("Podaj nazwę klienta!")
-        elif suma_netto == 0:
-            st.
+if st.button("Generuj Ofertę PDF"):
+    if not klient:
+        st.error("Podaj nazwę klienta!")
+    elif suma_netto == 0:
+        st.warning("Wybierz usługi!")
+    else:
+        try:
+            pdf_data = generate_pdf(klient, wybrane_uslugi, suma_netto, suma_vat, suma_brutto, vat_rate)
+            st.download_button(
+                label="📥 Pobierz PDF",
+                data=pdf_data,
+                file_name=f"Oferta_{klient}.pdf",
+                mime="application/pdf"
+            )
+        except Exception as e:
+            st.error(f"Błąd: {e}")
