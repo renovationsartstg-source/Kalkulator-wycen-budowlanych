@@ -94,4 +94,65 @@ def generate_pdf(klient, uslugi, netto, vat, brutto, vat_rate):
     pdf.cell(145, 10, "KWOTA BRUTTO:", align="R")
     pdf.cell(45, 10, f"{brutto:,.2f} zl", border=1, fill=True, align="R")
     
-    return pdf
+    return pdf.output()
+
+# --- INTERFEJS ---
+st.title(f"🏗️ {FIRMA} - System Ofertowy")
+
+klient = st.text_input("Nazwa Klienta", placeholder="np. Jan Kowalski")
+data_dzis = datetime.date.today().strftime("%d-%m-%Y")
+
+wybrane_uslugi = []
+suma_netto = 0
+
+tabs = st.tabs(list(CENNIK.keys()))
+
+for i, kategoria in enumerate(CENNIK.keys()):
+    with tabs[i]:
+        st.subheader(f"Kategoria: {kategoria}")
+        for usluga, cena in CENNIK[kategoria].items():
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.write(f"{usluga} (**{cena} zł**)")
+            with col2:
+                # POPRAWKA: unikalny klucz dla każdego inputa
+                ilosc = st.number_input("Ilość", min_value=0.0, step=1.0, key=f"input_{kategoria}_{usluga}")
+            
+            if ilosc > 0:
+                wartosc = ilosc * cena
+                wybrane_uslugi.append({
+                    "Usługa": usluga,
+                    "Ilość": ilosc,
+                    "Cena jedn.": f"{cena} zł",
+                    "Wartość": wartosc
+                })
+                suma_netto += wartosc
+
+st.divider()
+vat_rate = st.radio("Stawka VAT", [8, 23], index=0, horizontal=True)
+
+suma_vat = suma_netto * (vat_rate / 100)
+suma_brutto = suma_netto + suma_vat
+
+st.sidebar.header("Podsumowanie Finansowe")
+st.sidebar.write(f"**Netto:** {suma_netto:,.2f} zł")
+st.sidebar.write(f"**VAT ({vat_rate}%):** {suma_vat:,.2f} zł")
+st.sidebar.subheader(f"**BRUTTO: {suma_brutto:,.2f} zł**")
+
+if st.button("Generuj Ofertę PDF"):
+    if not klient:
+        st.error("Proszę podać nazwę klienta!")
+    elif suma_netto == 0:
+        st.warning("Nie wybrano żadnych usług!")
+    else:
+        try:
+            pdf_data = generate_pdf(klient, wybrane_uslugi, suma_netto, suma_vat, suma_brutto, vat_rate)
+            st.success("PDF gotowy!")
+            st.download_button(
+                label="📥 Pobierz Ofertę PDF",
+                data=pdf_data,
+                file_name=f"Oferta_{klient}.pdf",
+                mime="application/pdf"
+            )
+        except Exception as e:
+            st.error(f"Błąd: {e}")
