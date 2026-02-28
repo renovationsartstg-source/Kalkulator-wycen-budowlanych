@@ -1,6 +1,5 @@
 import streamlit as st
 import datetime
-import pandas as pd
 
 # --- KONFIGURACJA STRONY ---
 st.set_page_config(page_title="RenovationsArt - Kalkulator", page_icon="🏗️")
@@ -117,4 +116,5 @@ if st.button("Przygotuj ofertę do pobrania"):
             data=raport,
             file_name=f"Oferta_{klient}_{data_dzis}.txt",
             mime="text/plain"
+
         )
